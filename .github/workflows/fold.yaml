@@ -1,0 +1,48 @@
+name: Validate GitHub Pages Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validatePages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Validate Documentation Folders
+        run: |
+          echo "Checking for documentation folders..."
+          has_error=0
+
+          # Check for all documentation folders that match the pattern
+          for folder in */ ; do
+              if [[ -d "$folder" && "$folder" == *-docs/ ]]; then
+                  echo "Found documentation folder: $folder"
+                  echo "Validating structure in $folder..."
+                  ls -R "$folder"
+              else
+                  echo "Warning: No documentation folder found for $folder."
+                  has_error=1
+              fi
+          done
+
+          # Exit with an error if any documentation folder was missing
+          if [[ $has_error -eq 1 ]]; then
+              echo "Error: Some documentation folders are missing or incorrectly named!"
+              exit 1
+          fi
+
+      - name: Test GitHub Pages Response
+        run: |
+          echo "Checking GitHub Pages URL availability..."
+
+          # Validate the GitHub Pages URL for each documentation folder
+          for folder in */ ; do
+              if [[ -d "$folder" && "$folder" == *-docs/ ]]; then
+                  project_name=$(basename "$folder" -docs)
+                  echo "Testing URL for $project_name..."
+                  curl -I "https://username.github.io/documentation-host/${project_name}-docs/index.html"
+              fi
+          done
