@@ -1,0 +1,116 @@
+name: Code Quality and Documentation
+on: 
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint-and-docs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10']
+    
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff sphinx sphinx-rtd-theme sphinx-autoapi
+
+    - name: Get changed files
+      id: changed-files
+      run: |
+        # Make sure we have origin/main
+        git fetch origin main
+        
+        # List only changed .py files compared to main
+        git diff --name-only origin/main...HEAD | grep ".py$" > modFiles.txt || true
+        echo "files=$(cat modFiles.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+      
+    - name: Ensure pyproject.toml exists for Ruff
+      if: steps.changed-files.outputs.files != ''
+      run: |
+        if [ ! -f pyproject.toml ]; then
+          echo "Creating pyproject.toml with default Ruff config..."
+          echo "[tool.ruff]" >> pyproject.toml
+          echo "line-length = 88" >> pyproject.toml
+          echo "target-version = \"py310\"" >> pyproject.toml
+          echo "select = [\"E\", \"F\"]" >> pyproject.toml
+          echo "exclude = [\"docs\", \".venv\"]" >> pyproject.toml
+        fi
+
+    - name: Run Ruff linting
+      if: steps.changed-files.outputs.files != ''
+      run: |
+        for file in $(cat modFiles.txt); do
+          ruff check "$file" --config ./pyproject.toml || exit 1
+        done
+
+    - name: Build documentation
+      if: steps.changed-files.outputs.files != ''
+      run: |
+        # If no docs/ folder, create one using sphinx-quickstart
+        if [ ! -d docs ]; then
+          echo "No docs/ folder found. Initializing with Sphinx..."
+          sphinx-quickstart docs -q \
+            -p "MyProject" \
+            -a "GitHub Actions" \
+            --sep \
+            --makefile \
+            --ext-autodoc \
+            --ext-viewcode \
+            --ext-githubpages \
+            --no-batchfile
+
+          # Append AutoAPI + RTD theme settings to conf.py
+          echo "extensions += ['autoapi.extension']" >> docs/source/conf.py
+          echo "autoapi_type = 'python'" >> docs/source/conf.py
+          echo "autoapi_dirs = ['../../']" >> docs/source/conf.py
+          echo "html_theme = 'sphinx_rtd_theme'" >> docs/source/conf.py
+        fi
+
+        # Build the docs
+        make -C docs clean
+        make -C docs html
+
+    - name: Deploy documentation
+      if: steps.changed-files.outputs.files != ''
+      env:
+        DOCS_REPO: "AaravAgarwal/doc_test_3"
+        DOCS_TOKEN: ${{ secrets.DOCPUSHING }}
+      run: |
+        # If docs/build/html doesn't exist, skip
+        if [ ! -d docs/build/html ]; then
+          echo "Docs not built — skipping deployment."
+          exit 0
+        fi
+
+        git config --global user.email "aarav3@illinois.edu"
+        git config --global user.name "GitHub Actions"
+
+        # Clone external docs repository
+        git clone "https://x-access-token:${DOCS_TOKEN}@github.com/${DOCS_REPO}.git" external-docs
+
+        # Create repo-specific directory inside external-docs
+        REPO_NAME=$(basename "$GITHUB_REPOSITORY")
+        TARGET_DIR="external-docs/${REPO_NAME}-docs"
+        mkdir -p "$TARGET_DIR"
+
+        # Copy generated docs
+        cp -R docs/build/html/* "$TARGET_DIR/"
+
+        # Commit and push changes
+        cd external-docs
+        git add .
+        git commit -m "Docs update: ${GITHUB_SHA}" || echo "No changes to commit"
+        git push origin main
