@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Check for updates to Python packages managed by pip/pyproject.toml
+  - package-ecosystem: "pip"
+    directory: "/" # Location of pyproject.toml
+    schedule:
+      interval: "weekly" # Check for updates once a week
+    # Group updates for Sphinx and related packages into a single PR
+    groups:
+      sphinx:
+        patterns:
+          - "sphinx*"
+
+  # Also check for updates to the GitHub Actions you use in your workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
