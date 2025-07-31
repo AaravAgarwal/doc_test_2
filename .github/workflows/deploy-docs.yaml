@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
     paths:
+      # Added pyproject.toml to the trigger paths
       - '**.py'
       - 'docs/**'
+      - 'pyproject.toml'
       - '.github/workflows/deploy-docs.yaml'
   workflow_dispatch:
 
@@ -24,27 +26,33 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install and configure uv
-      run: |
-        pip install uv
-        uv config set cache-dir ./.uv-cache
+    # FIX 1: Replaced the failing "Install and configure" step.
+    - name: Install uv
+      run: pip install uv
 
-    - name: Cache uv dependencies
+    # FIX 2: Renamed for clarity and ensured the key is correct.
+    - name: Restore uv cache
       uses: actions/cache@v4
       with:
         path: ./.uv-cache
-        key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
+        key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
 
+    # FIX 3: Added the 'env' block and now using pyproject.toml for dependencies.
     - name: Install dependencies with uv
+      env:
+        UV_CACHE_DIR: ./.uv-cache
       run: |
-        uv pip install --system sphinx sphinx-rtd-theme sphinx-autoapi
+        uv pip install --system .[dev,docs]
 
+    # FIX 4: Added the '--sep' flag for sphinx robustness, as we did in the CI workflow.
     - name: Build documentation
       run: |
         REPO_NAME=${{ github.event.repository.name }}
         
         if [ ! -d docs ]; then
-          sphinx-quickstart docs -q -p "$REPO_NAME" -a "GitHub Actions" --ext-autodoc
+          sphinx-quickstart docs -q -p "$REPO_NAME" -a "GitHub Actions" --sep --ext-autodoc
           cat << EOF >> docs/source/conf.py
         extensions.append('autoapi.extension')
         autoapi_type = 'python'
@@ -66,6 +74,5 @@ jobs:
         user_name: 'github-actions[bot]'
         user_email: 'github-actions[bot]@users.noreply.github.com'
         commit_message: 'Docs update for ${{ github.sha }}'
-        # The repo-named folder in the target repository
         destination_dir: ${{ github.event.repository.name }}
         keep_files: false
