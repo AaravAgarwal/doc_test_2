@@ -19,20 +19,23 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install and configure uv
-        run: |
-          # Install uv, the fast package installer
-          pip install uv
-          # Configure uv to cache dependencies for faster re-runs
-          uv config set cache-dir ./.uv-cache
+      # FIX 1: Replaced the old "Install and configure" step with a simple, correct install.
+      - name: Install uv
+        run: pip install uv
         
-      - name: Cache uv dependencies
+      # FIX 2: Renamed step for clarity. This step prepares the cache directory.
+      - name: Restore uv cache
         uses: actions/cache@v4
         with:
           path: ./.uv-cache
           key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', '**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
 
+      # FIX 3: Added the 'env' block to tell uv where the cache is. This is the crucial fix.
       - name: Install dependencies with uv
+        env:
+          UV_CACHE_DIR: ./.uv-cache
         run: |
           uv pip install --system ruff sphinx sphinx-rtd-theme sphinx-autoapi
 
