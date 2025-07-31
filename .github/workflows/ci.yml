@@ -59,11 +59,14 @@ jobs:
           
           if [ ! -d docs ]; then
             echo "Initializing docs for build test..."
-            sphinx-quickstart docs -q -p "$REPO_NAME" -a "GitHub Actions" --ext-autodoc
+            # FIX: Added the --sep flag to create the 'source' and 'build' subdirectories
+            sphinx-quickstart docs -q -p "$REPO_NAME" -a "GitHub Actions" --sep --ext-autodoc
+            
+            # This line will now succeed because docs/source/conf.py will exist
             cat << EOF >> docs/source/conf.py
           extensions.append('autoapi.extension')
           autoapi_type = 'python'
-          autoapi_dirs = ['../']
+          autoapi_dirs = ['../'] # autoapi should look in the parent directory from /docs/source
           html_theme = 'sphinx_rtd_theme'
           EOF
           fi
