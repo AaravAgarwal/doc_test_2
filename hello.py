@@ -8,3 +8,4 @@ def say_hello(name: str = "World") -> None:
         None
     """
     print(f"Hello, {name}!")
+    print(f"Bye, {name}!")
